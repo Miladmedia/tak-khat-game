@@ -17,6 +17,8 @@ var sway = 0.0
 var balance = 0.0
 var best = 0
 var wins = 0
+var tutorial_seen = false
+var sound_on = true
 
 var items = ["کتاب", "سبد", "پشتی", "پیت حلب", "پتو", "کارتن"]
 var widths = [75, 62, 82, 58, 90, 70]
@@ -28,23 +30,36 @@ var color_items = [
 func _ready():
     get_tree().root.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
     _load()
+    if OS.has_feature("android"):
+        DisplayServer.screen_set_orientation(DisplayServer.SCREEN_PORTRAIT)
+        DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+    $Music.finished.connect(_restart_music)
+    if sound_on:
+        $Music.play()
     set_process(true)
 
 func _load():
     var f = FileAccess.open("user://save.json", FileAccess.READ)
     if f == null:
+        mode = "tutorial"
         return
     var d = JSON.parse_string(f.get_as_text())
     if typeof(d) == TYPE_DICTIONARY:
         level = clampi(int(d.get("level", 1)), 1, 24)
         best = maxi(0, int(d.get("best", 0)))
         wins = maxi(0, int(d.get("wins", 0)))
+        tutorial_seen = bool(d.get("tutorial_seen", false))
+        sound_on = bool(d.get("sound_on", true))
+        if not tutorial_seen:
+            mode = "tutorial"
+    else:
+        mode = "tutorial"
 
 func _save():
     var f = FileAccess.open("user://save.json", FileAccess.WRITE)
     if f == null:
         return
-    f.store_string(JSON.stringify({"level": level, "best": best, "wins": wins}))
+    f.store_string(JSON.stringify({"level": level, "best": best, "wins": wins, "tutorial_seen": tutorial_seen, "sound_on": sound_on}))
 
 func _draw():
     var w = size.x
@@ -73,7 +88,15 @@ func _draw():
         _draw_tower(w / 2, h * 0.47 - 35)
         _button("شروع بازی", h * 0.68, BRICK)
         _button("بی‌پایان", h * 0.77, GOLD)
+        _button("راهنما", h * 0.84, Color("#596878"))
         _text("پیشرفت  " + _fa(str(level - 1)) + " / ۲۴", w / 2, h * 0.89, 18, CREAM)
+        _sound_button()
+    elif mode == "tutorial":
+        _text("راهنمای تک‌خط", w / 2, 105, 32, GOLD, true)
+        _wrapped_text("وسیله را از پایین انتخاب کن؛ بعد برای حفظ تعادل بکش. پیش از صفر شدن زمان، «چیدن» را بزن و خودت را به خط طلایی برسان.\n\nاین‌جا حتی پتو هم مهندس مخابرات شده!", w / 2, h * 0.37, 22, CREAM)
+        _button("بزن بریم", h * 0.72, BRICK)
+        _button("بازگشت به منو", h * 0.82, GOLD)
+        _sound_button()
     elif mode == "game":
         var header = "بی‌پایان" if endless else "مرحله " + _fa(str(level)) + " از ۲۴"
         _text(header, w / 2, 43, 22, CREAM, true)
@@ -95,13 +118,13 @@ func _draw():
         var wind = "راست" if int(seconds) % 4 < 2 else "چپ"
         _text("باد از سمت " + wind + " می‌وزد", w / 2, h * 0.82, 14, CREAM)
         # touch target picker strip
-        draw_rect(Rect2(12, h * 0.85, w - 24, h * 0.105), Color("#263f5b"))
+        draw_rect(Rect2(12, h * 0.85, w - 24, h * 0.075), Color("#263f5b"))
         var cell = (w - 24) / items.size()
         for i in range(items.size()):
             var x = 12 + i * cell
-            draw_rect(Rect2(x + 3, h * 0.865, cell - 6, h * 0.052), color_items[i] if i == selected else Color("#596878"))
-            _text(items[i], x + cell / 2, h * 0.910, 12, CREAM)
-        _button("چیدن", h * 0.962, BRICK)
+            draw_rect(Rect2(x + 3, h * 0.858, cell - 6, h * 0.032), color_items[i] if i == selected else Color("#596878"))
+            _text(items[i], x + cell / 2, h * 0.895, 12, CREAM)
+        _button("چیدن", h * 0.956, BRICK)
     elif mode in ["win", "lose"]:
         _draw_tower(w / 2, h * 0.49)
         if mode == "win":
@@ -115,6 +138,40 @@ func _draw():
 
 func _text(t, x, y, sz, col, bold = false):
     draw_string(FONT, Vector2(x - 220, y + sz * 0.35), t, HORIZONTAL_ALIGNMENT_CENTER, 440, sz, col)
+
+func _wrapped_text(t, x, y, sz, col):
+    var paragraphs = t.split("\n")
+    var lines = []
+    for paragraph in paragraphs:
+        var words = paragraph.split(" ")
+        var line = ""
+        for word in words:
+            var candidate = word if line.is_empty() else line + " " + word
+            if FONT.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x > size.x - 48 and not line.is_empty():
+                lines.append(line)
+                line = word
+            else:
+                line = candidate
+        lines.append(line)
+    for i in range(lines.size()):
+        draw_string(FONT, Vector2(24, y + i * (sz * 1.65)), lines[i], HORIZONTAL_ALIGNMENT_CENTER, size.x - 48, sz, col)
+
+func _sound_button():
+    var label = "صدا: روشن" if sound_on else "صدا: خاموش"
+    _text(label, size.x / 2, size.y * 0.94, 16, GOLD)
+
+func _toggle_sound():
+    sound_on = not sound_on
+    if sound_on:
+        $Music.play()
+    else:
+        $Music.stop()
+    _save()
+    queue_redraw()
+
+func _restart_music():
+    if sound_on:
+        $Music.play()
 
 func _button(t, y, col):
     draw_rect(Rect2(size.x * 0.18, y - 26, size.x * 0.64, 52), col)
@@ -167,6 +224,8 @@ func _fa(s):
 func _start(e = false):
     endless = e
     mode = "game"
+    if sound_on and not $Music.playing:
+        $Music.play()
     pieces = []
     seconds = 0.0 if endless else 60.0
     sway = 0.0
@@ -191,6 +250,8 @@ func _process(dt):
 
 func _finish(won):
     mode = "win" if won else "lose"
+    if sound_on:
+        $Sfx.get_node("Win" if won else "Lose").play()
     if won:
         wins += 1
         if not endless:
@@ -212,29 +273,50 @@ func _input(e):
 func _tap(p):
     var h = size.y
     var w = size.x
+    if mode in ["menu", "tutorial"] and p.y > h * 0.92:
+        _toggle_sound()
+        return
     if mode == "menu":
-        if p.y > h * 0.62 and p.y < h * 0.75:
+        if p.y >= h * 0.62 and p.y < h * 0.74:
+            tutorial_seen = true
+            _save()
             _start(false)
-        elif p.y >= h * 0.75:
+        elif p.y >= h * 0.74 and p.y < h * 0.81:
+            tutorial_seen = true
+            _save()
             _start(true)
+        elif p.y >= h * 0.81 and p.y < h * 0.87:
+            mode = "tutorial"
+        queue_redraw()
+    elif mode == "tutorial":
+        if p.y >= h * 0.68 and p.y < h * 0.77:
+            tutorial_seen = true
+            _save()
+            _start(false)
+        elif p.y >= h * 0.78 and p.y < h * 0.87:
+            tutorial_seen = true
+            mode = "menu"
+            _save()
+        queue_redraw()
     elif mode == "game":
-        if p.y > h * 0.84:
-            if p.y > h * 0.945:
-                var i = selected
-                var wid = widths[i]
-                pieces.append([i, wid, clampf(balance * 25.0 + randf_range(-5.0, 5.0), -24.0, 24.0)])
-                balance = clampf(balance + randf_range(-0.12, 0.12), -1.0, 1.0)
-                if pieces.size() >= _goal():
-                    if abs(sway) < 12.0:
-                        _finish(true)
-                    else:
-                        _finish(false)
-            else:
-                selected = clampi(int((p.x - 12) / ((w - 24) / items.size())), 0, items.size() - 1)
-        else:
+        var picker_top = h * 0.85
+        var picker_bottom = h * 0.925
+        var button_top = h * 0.926
+        var button_bottom = h * 0.992
+        if p.y >= button_top and p.y <= button_bottom:
+            var i = selected
+            var wid = widths[i]
+            pieces.append([i, wid, clampf(balance * 25.0 + randf_range(-5.0, 5.0), -24.0, 24.0)])
+            if sound_on: $Sfx/Place.play()
+            balance = clampf(balance + randf_range(-0.12, 0.12), -1.0, 1.0)
+            if pieces.size() >= _goal():
+                _finish(abs(sway) < 12.0)
+        elif p.y >= picker_top and p.y < picker_bottom:
+            selected = clampi(int((p.x - 12) / ((w - 24) / items.size())), 0, items.size() - 1)
+        elif p.y < picker_top:
             balance = clampf((p.x - w / 2.0) / (w / 2.0), -1.0, 1.0)
     elif mode in ["win", "lose"]:
-        if p.y > h * 0.80:
+        if p.y >= h * 0.78:
             mode = "menu"
             _save()
         else:

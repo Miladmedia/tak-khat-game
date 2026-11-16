@@ -1,6 +1,10 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://game.gd" id="1"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/music.wav" id="2"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/place.wav" id="3"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/win.wav" id="4"]
+[ext_resource type="AudioStreamWAV" path="res://assets/audio/lose.wav" id="5"]
 
 [node name="TakKhat" type="Control"]
 layout_mode = 3
@@ -10,3 +14,20 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
+
+[node name="Music" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("2")
+volume_db = -19.0
+autoplay = true
+
+[node name="Sfx" type="AudioStreamPlayer" parent="."]
+volume_db = -4.0
+
+[node name="Place" type="AudioStreamPlayer" parent="Sfx"]
+stream = ExtResource("3")
+
+[node name="Win" type="AudioStreamPlayer" parent="Sfx"]
+stream = ExtResource("4")
+
+[node name="Lose" type="AudioStreamPlayer" parent="Sfx"]
+stream = ExtResource("5")
