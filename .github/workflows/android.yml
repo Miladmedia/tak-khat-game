@@ -1,0 +1,29 @@
+name: Android APK
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.2.2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import and parse project
+        run: godot --headless --editor --path . --import
+      - name: Headless project check
+        run: godot --headless --path . --quit
+      - name: Export debug APK
+        run: mkdir -p build && godot --headless --path . --export-debug Android build/tak_khat.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tak-khat-android-debug
+          path: build/tak_khat.apk
+          if-no-files-found: error
