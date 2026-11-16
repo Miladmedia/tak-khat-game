@@ -65,6 +65,8 @@ jobs:
         run: |
           set -euo pipefail
           keytool -genkeypair -v \
+            -keyalg RSA \
+            -keysize 2048 \
             -keystore "$RUNNER_TEMP/tak-khat-debug.keystore" \
             -storetype PKCS12 \
             -storepass android \
