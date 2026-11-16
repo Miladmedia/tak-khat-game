@@ -17,6 +17,7 @@ jobs:
         uses: chickensoft-games/setup-godot@v1
         with:
           version: 4.2.2
+          flavor: "standard" # این بخش نسخه استاندارد (غیر .NET) را تضمین می‌کند
 
       - name: Install Export Templates
         run: |
@@ -33,7 +34,6 @@ jobs:
 
       - name: Accept Android SDK Licenses
         run: |
-          # پذیرش خودکار لایسنس‌های اندروید
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
       - name: Export APK
