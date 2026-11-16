@@ -1,45 +1,119 @@
-name: Android Build
-on: [push]
+name: Android APK
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  export:
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
-      - name: Setup Godot
-        uses: chickensoft-games/setup-godot@v1
-        with:
-          version: 4.2.2
-
-      - name: Install Export Templates
+      - name: Install Android SDK packages
+        shell: bash
         run: |
-          mkdir -p ~/.local/share/godot/export_templates/4.2.2.stable/
-          wget -q https://github.com/godotengine/godot/releases/download/4.2.2-stable/Godot_v4.2.2-stable_export_templates.tpz
-          unzip -q Godot_v4.2.2-stable_export_templates.tpz
-          mv templates/* ~/.local/share/godot/export_templates/4.2.2.stable/
+          set -euo pipefail
+          test -n "${ANDROID_HOME:-}"
+          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses < <(yes)
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platform-tools' \
+            'build-tools;33.0.2' \
+            'platforms;android-33'
 
-      - name: Generate Debug Keystore
+      - name: Install Godot 4.2.2 standard
+        shell: bash
         run: |
-          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999
-          mkdir -p ~/.android/
-          mv debug.keystore ~/.android/debug.keystore
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSLO https://github.com/godotengine/godot/releases/download/4.2.2-stable/Godot_v4.2.2-stable_linux.x86_64.zip
+          unzip -q Godot_v4.2.2-stable_linux.x86_64.zip
+          mv Godot_v4.2.2-stable_linux.x86_64 godot
+          chmod +x godot
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          version="$("$RUNNER_TEMP/godot" --version)"
+          printf 'Godot version: %s\n' "$version"
+          [[ "$version" == 4.2.2.stable.* ]]
+          [[ "${version,,}" != *mono* ]]
 
-      # حذف کامل اکشن setup-android و استفاده از لایسنس پیش‌فرض
-      - name: Export APK
+      - name: Install Godot export templates
+        shell: bash
         run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSLO https://github.com/godotengine/godot/releases/download/4.2.2-stable/Godot_v4.2.2-stable_export_templates.tpz
+          mkdir -p "$RUNNER_TEMP/templates-extract"
+          unzip -q Godot_v4.2.2-stable_export_templates.tpz -d "$RUNNER_TEMP/templates-extract"
+          target="$HOME/.local/share/godot/export_templates/4.2.2.stable"
+          mkdir -p "$target"
+          cp -a "$RUNNER_TEMP/templates-extract/templates/." "$target/"
+          test -s "$target/android_debug.apk"
+
+      - name: Create Android debug keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/tak-khat-debug.keystore" \
+            -storetype PKCS12 \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -validity 10000
+
+      - name: Configure Godot Android SDK paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ANDROID_HOME:-}"
+          test -d "$ANDROID_HOME"
+          test -n "${JAVA_HOME:-}"
+          test -d "$JAVA_HOME"
+          mkdir -p "$HOME/.config/godot"
+          escape_godot_string() {
+            local value="$1"
+            value="${value//\\/\\\\}"
+            value="${value//"/\\"}"
+            printf '%s' "$value"
+          }
+          android_sdk_path="$(escape_godot_string "$ANDROID_HOME")"
+          java_sdk_path="$(escape_godot_string "$JAVA_HOME")"
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$android_sdk_path"
+          export/android/java_sdk_path = "$java_sdk_path"
+          EOF
+
+      - name: Import and export Android APK
+        shell: bash
+        env:
+          GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ runner.temp }}/tak-khat-debug.keystore
+          GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+          GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+        run: |
+          set -euo pipefail
           mkdir -p build
-          # اجرای اکسپورت با استفاده از SDK پیش‌فرض سیستم
-          godot --headless --export-debug "Android" build/tak_khat.apk
+          godot --headless --editor --path . --import
+          godot --headless --path . --export-debug Android build/tak_khat.apk
+          test -s build/tak_khat.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tak_khat-apk
+          name: tak-khat-android-debug
           path: build/tak_khat.apk
+          if-no-files-found: error
